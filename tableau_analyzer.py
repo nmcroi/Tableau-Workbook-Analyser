@@ -5,6 +5,18 @@ import os
 import shutil
 import sys
 from datetime import datetime
+import logging
+
+# Logging setup
+logger = logging.getLogger(__name__)
+# Configure logger (do this once, preferably at application entry point or module import)
+# For now, basic configuration. This could be moved to main() or a dedicated setup function.
+if not logger.handlers: # Avoid adding multiple handlers if the module is reloaded
+    handler = logging.StreamHandler(sys.stderr)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO) # Default level, can be changed as needed
 
 # Fallback voor __file__ in geval van directe uitvoering of interactieve sessies
 try:
@@ -17,6 +29,66 @@ NAMESPACES = {
     'user': 'http://www.tableausoftware.com/xml/user',
     # Voeg hier eventueel andere vaak gebruikte namespaces toe
 }
+
+# Functies voor complexiteit en afhankelijkheden
+def score_complexity(formula_string):
+    """Scoort de complexiteit van een Tableau formule."""
+    if not formula_string:
+        return "Onbekend" # Of "N/A"
+
+    length = len(formula_string)
+    # Ruwe telling van functies (vereenvoudigd: telt open haakjes)
+    # Een betere methode zou zijn om specifieke Tableau functienamen te tellen.
+    num_functions = formula_string.count('(') 
+    
+    # Basis nesting check (vereenvoudigd: diepte van haakjes)
+    # Dit is een zeer basale indicator en kan verfijnd worden.
+    nesting_depth = 0
+    max_nesting_depth = 0
+    for char in formula_string:
+        if char == '(':
+            nesting_depth += 1
+            max_nesting_depth = max(max_nesting_depth, nesting_depth)
+        elif char == ')':
+            nesting_depth -= 1
+
+    if length >= 150 or num_functions > 3 or max_nesting_depth > 2: # Aangepast voor max_nesting_depth
+        return "Complex"
+    elif length >= 50 or num_functions > 1 or max_nesting_depth > 1: # Aangepast voor max_nesting_depth
+        return "Gemiddeld"
+    else:
+        return "Eenvoudig"
+
+def extract_field_dependencies(formula_string, all_fields):
+    """Extraheert veldafhankelijkheden uit een formule."""
+    dependencies = set() # Gebruik een set om duplicaten te voorkomen
+    if not formula_string or not all_fields:
+        return []
+
+    # Zoek naar velden tussen blokhaken, bijv. [Sales] of [Order Date]
+    # Deze regex probeert ook veldnamen met spaties correct te matchen
+    import re
+    # ([^\[\]]+) zorgt ervoor dat we de inhoud binnen de haken krijgen
+    # We moeten de blokhaken escapen omdat ze speciale betekenis hebben in regex.
+    potential_fields = re.findall(r'\[([^\[\]]+)\]', formula_string)
+    
+    for pf in potential_fields:
+        # Vergelijk met de lijst van alle bekende velden (case-insensitive voor robuustheid)
+        # Soms hebben velden in formules een prefix van hun databron, bv [DatasourceName].[FieldName]
+        # Voor nu negeren we de datasource prefix in de matching, maar dit kan verfijnd worden.
+        cleaned_pf = pf.split('.')[-1] # Neem het laatste deel als er een punt is
+        
+        for field_name in all_fields:
+            if field_name.lower() == cleaned_pf.lower():
+                dependencies.add(field_name) # Voeg de originele veldnaam toe (met juiste casing)
+                break 
+                # Als een veldnaam in de formule [Orders (Sample)].[Order ID] is
+                # en all_fields bevat "Order ID", dan moet dit matchen.
+                # De huidige cleaned_pf logica zal "Order ID]" teruggeven zonder de laatste ']'
+                # Dit moet nog verfijnd worden als dit een probleem blijkt.
+                # Voor nu, uitgaande van simpele [FieldName] of [FieldName met spaties]
+
+    return list(dependencies)
 
 def registreer_alle_namespaces(bestands_pad):
     """
@@ -33,36 +105,57 @@ def registreer_alle_namespaces(bestands_pad):
                 ET.register_namespace(ns_prefix, ns_uri)
                 NAMESPACES[ns_prefix] = ns_uri # Voeg toe aan onze globale dictionary
                 geziene_uris.add(ns_uri)
-        print(f"INFO: Geregistreerde namespaces: {list(NAMESPACES.keys())}")
+        logger.info(f"Geregistreerde namespaces: {list(NAMESPACES.keys())}")
     except ET.ParseError as e:
-        print(f"FOUT: XML Parse Fout bij registratie namespaces in {os.path.basename(bestands_pad)}: {e}")
+        logger.error(f"XML Parse Fout bij registratie namespaces in {os.path.basename(bestands_pad)}: {e}")
+        # Optioneel: raise de error opnieuw als de caller dit moet weten
+        # raise
     except Exception as e:
-        print(f"FOUT: Algemene fout bij registratie namespaces: {e}")
+        logger.exception(f"Algemene fout bij registratie namespaces voor {os.path.basename(bestands_pad)}: ")
+        # Optioneel: raise
 
 
 def extraheer_twb_uit_twbx(twbx_bestands_pad, tijdelijke_map):
-    if not os.path.exists(tijdelijke_map):
-        os.makedirs(tijdelijke_map)
     try:
+        if not os.path.exists(tijdelijke_map):
+            os.makedirs(tijdelijke_map)
+            logger.info(f"Tijdelijke map aangemaakt: {tijdelijke_map}")
+
         with zipfile.ZipFile(twbx_bestands_pad, 'r') as zip_ref:
             twb_files = [name for name in zip_ref.namelist() if name.endswith('.twb')]
             if not twb_files:
-                print(f"FOUT: Geen .twb bestand gevonden in {twbx_bestands_pad}")
+                logger.error(f"Geen .twb bestand gevonden in {twbx_bestands_pad}")
                 return None
-            twb_file_in_zip = twb_files[0]
+            
+            twb_file_in_zip = twb_files[0] # Standaard de eerste
             # Voorkeur voor .twb in root van zip
             for f_name in twb_files:
                 if '/' not in f_name and '\\' not in f_name:
                     twb_file_in_zip = f_name
                     break
+            
+            logger.info(f"Geselecteerd .twb bestand uit archief: {twb_file_in_zip}")
             doel_pad = os.path.join(tijdelijke_map, os.path.basename(twb_file_in_zip))
+            
             with zip_ref.open(twb_file_in_zip) as source, open(doel_pad, 'wb') as target:
                 shutil.copyfileobj(source, target)
-            print(f"INFO: .twb bestand geëxtraheerd naar: {doel_pad}")
+            logger.info(f".twb bestand geëxtraheerd naar: {doel_pad}")
             return doel_pad
+            
+    except FileNotFoundError:
+        logger.error(f"Bestand niet gevonden: {twbx_bestands_pad}")
+        raise # Re-raise voor app.py om specifiek te handelen
+    except zipfile.BadZipFile:
+        logger.error(f"Ongeldig of corrupt zip-archief: {twbx_bestands_pad}")
+        raise # Re-raise voor app.py
+    except (KeyError, IndexError) as e:
+        logger.error(f"Fout bij vinden van .twb in archief {twbx_bestands_pad}: {e}")
+        # Dit kan duiden op een onverwachte structuur of geen .twb
+        raise # Re-raise met een eigen gedefinieerde exception zou nog beter zijn
     except Exception as e:
-        print(f"FOUT bij uitpakken {twbx_bestands_pad}: {e}")
-        return None
+        logger.exception(f"Algemene fout bij uitpakken van {twbx_bestands_pad}: ")
+        # Vang andere onverwachte fouten op
+        raise # Re-raise voor generieke afhandeling
 
 def analyseer_tableau_bestand(twb_bestands_pad):
     """
@@ -72,7 +165,7 @@ def analyseer_tableau_bestand(twb_bestands_pad):
     Returns:
         dict: Een dictionary met de geëxtraheerde metadata, of None bij een fout.
     """
-    print(f"\nINFO: Start gedetailleerde analyse van: {os.path.basename(twb_bestands_pad)}")
+    logger.info(f"Start gedetailleerde analyse van: {os.path.basename(twb_bestands_pad)}")
     project_data = {
         "bestandsnaam": os.path.basename(twb_bestands_pad),
         "extract_datum": datetime.now().isoformat(),
@@ -160,16 +253,42 @@ def analyseer_tableau_bestand(twb_bestands_pad):
         
         # (Voeg hier later extractie voor Verhalen, Parameters, Extensies toe indien nodig)
 
-    except ET.ParseError as e:
-        print(f"FOUT: XML Parse Fout in {os.path.basename(twb_bestands_pad)}: {e}")
-        return None
-    except Exception as e:
-        print(f"FOUT: Algemene fout tijdens analyse van {os.path.basename(twb_bestands_pad)}: {e}")
-        import traceback
-        traceback.print_exc() # Voor meer details bij onverwachte fouten
-        return None
+        # Na het verzamelen van alle kolommen, bepaal afhankelijkheden voor berekende velden
+        all_field_names = []
+        for ds in project_data["databronnen"]:
+            for col in ds["kolommen"]:
+                # Gebruik caption als die er is, anders naam. Dit moet consistent zijn met hoe velden in formules worden gerefereerd.
+                # Tableau gebruikt meestal de 'caption' of de 'name' (vaak [name]) in formules.
+                # We nemen aan dat de 'name' (interne naam) het meest betrouwbaar is voor matching.
+                # Velden in formules worden meestal gerefereerd als [Veldnaam] wat overeenkomt met 'name' of 'caption'.
+                # Voor nu gebruiken we 'name' als de primaire identificatie.
+                if col.get("naam"): # Zorg ervoor dat er een naam is
+                    all_field_names.append(col["naam"])
+        
+        # Verwijder duplicaten als veldnamen (zonder datasource prefix) in meerdere databronnen voorkomen
+        # Dit is een vereenvoudiging; echte afhankelijkheden kunnen datasource-specifiek zijn.
+        unique_field_names = list(set(all_field_names))
+        
+        for ds in project_data["databronnen"]:
+            for col_data in ds["kolommen"]:
+                if col_data.get("is_berekend_veld") and col_data.get("formule"):
+                    formula = col_data["formule"]
+                    col_data["complexiteit"] = score_complexity(formula)
+                    col_data["afhankelijkheden"] = extract_field_dependencies(formula, unique_field_names)
+                elif col_data.get("is_berekend_veld"): # Berekend veld maar geen formule? Geef standaard waarden.
+                    col_data["complexiteit"] = "Onbekend"
+                    col_data["afhankelijkheden"] = []
 
-    print(f"INFO: Gedetailleerde analyse van {os.path.basename(twb_bestands_pad)} voltooid.")
+    except ET.ParseError as e:
+        logger.error(f"XML Parse Fout in {os.path.basename(twb_bestands_pad)}: {e}")
+        # Stuur de error door zodat app.py deze kan afhandelen
+        raise
+    except Exception as e:
+        # Vang andere onverwachte fouten tijdens de analyse op
+        logger.exception(f"Algemene fout tijdens analyse van {os.path.basename(twb_bestands_pad)}: ")
+        raise # Stuur door voor generieke afhandeling in app.py
+
+    logger.info(f"Gedetailleerde analyse van {os.path.basename(twb_bestands_pad)} voltooid.")
     return project_data
 
 def sla_op_als_json(data, uitvoer_bestands_pad):
@@ -177,91 +296,120 @@ def sla_op_als_json(data, uitvoer_bestands_pad):
     try:
         with open(uitvoer_bestands_pad, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
-        print(f"\nINFO: Analyse succesvol opgeslagen als: {uitvoer_bestands_pad}")
+        logger.info(f"Analyse succesvol opgeslagen als: {uitvoer_bestands_pad}")
         return True
-    except IOError as e:
-        print(f"\nFOUT: Kon JSON-bestand niet schrijven naar {uitvoer_bestands_pad}: {e}")
+    except (IOError, PermissionError, FileNotFoundError) as e: # Meer specifieke IO errors
+        logger.error(f"Kon JSON-bestand niet schrijven naar {uitvoer_bestands_pad}: {e}")
+        return False
+    except TypeError as e: # Voor niet-serialiseerbare data
+        logger.error(f"Data is niet JSON serialiseerbaar bij opslaan naar {uitvoer_bestands_pad}: {e}")
         return False
     except Exception as e:
-        print(f"\nFOUT: Algemene fout bij opslaan JSON: {e}")
+        logger.exception(f"Algemene fout bij opslaan JSON naar {uitvoer_bestands_pad}: ")
         return False
 
 def process_tableau_file(file_path):
     """Verwerkt een .twb of .twbx bestand."""
-    print(f"\nVerwerken bestand: {file_path}")
+    logger.info(f"Start verwerking bestand: {file_path}")
     
     is_twbx = file_path.lower().endswith('.twbx')
     twb_to_analyze = file_path
     temp_dir_for_twbx = None
+    analysis_successful = False 
 
-    if is_twbx:
-        print("INFO: .twbx bestand gedetecteerd, bezig met uitpakken...")
-        temp_dir_for_twbx = "temp_tableau_extract_" + os.path.basename(file_path).replace('.', '_')
-        extracted_twb = extraheer_twb_uit_twbx(file_path, temp_dir_for_twbx)
-        if not extracted_twb:
-            return False # Fout tijdens extractie
-        twb_to_analyze = extracted_twb
-    
-    # Voer hier de gedetailleerde analyse uit
-    analyse_data = analyseer_tableau_bestand(twb_to_analyze)
-    analysis_successful = False # Standaard
-
-    if analyse_data:
+    try:
+        if is_twbx:
+            logger.info(".twbx bestand gedetecteerd, bezig met uitpakken...")
+            # Genereer een uniekere tijdelijke mapnaam om conflicten te vermijden
+            base_name = os.path.basename(file_path).replace('.', '_')
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+            temp_dir_for_twbx = f"temp_tableau_extract_{base_name}_{timestamp}"
+            
+            extracted_twb = extraheer_twb_uit_twbx(file_path, temp_dir_for_twbx)
+            # extraheer_twb_uit_twbx zal nu exceptions raisen, die hieronder worden gevangen
+            twb_to_analyze = extracted_twb
+        
+        analyse_data = analyseer_tableau_bestand(twb_to_analyze)
+        # analyseer_tableau_bestand zal nu exceptions raisen
+        
         # Bepaal JSON output pad
-        base_name = os.path.basename(file_path)
-        output_json_name = os.path.splitext(base_name)[0] + "_analyse.json"
-        # Gebruik de globale SCRIPT_DIR
-        output_json_pad = os.path.join(SCRIPT_DIR, output_json_name)
+        # Sla op in dezelfde map als het script, tenzij anders geconfigureerd
+        output_dir = SCRIPT_DIR 
+        # output_dir = "." # Of een andere configureerbare map
+        # os.makedirs(output_dir, exist_ok=True) # Zorg ervoor dat de output map bestaat
+
+        base_name_original_file = os.path.basename(file_path) # Gebruik originele bestandsnaam voor output
+        output_json_name = os.path.splitext(base_name_original_file)[0] + "_analyse.json"
+        output_json_pad = os.path.join(output_dir, output_json_name)
         
         if sla_op_als_json(analyse_data, output_json_pad):
             analysis_successful = True
         else:
-            print("FOUT: Opslaan als JSON mislukt.")
-            analysis_successful = False # Expliciet voor duidelijkheid
-    else:
-        print("FOUT: Analyse heeft geen data geretourneerd.")
-        analysis_successful = False
+            # sla_op_als_json logt zelf al de fout
+            analysis_successful = False
 
-    # Ruim tijdelijke map op indien gebruikt voor .twbx
-    if temp_dir_for_twbx and os.path.exists(temp_dir_for_twbx):
-        try:
-            shutil.rmtree(temp_dir_for_twbx)
-            print(f"INFO: Tijdelijke map {temp_dir_for_twbx} opgeruimd.")
-        except Exception as e:
-            print(f"WAARSCHUWING: Kon tijdelijke map {temp_dir_for_twbx} niet opruimen: {e}")
+    except (FileNotFoundError, zipfile.BadZipFile, ET.ParseError, KeyError, IndexError) as e:
+        # Deze errors zijn al gelogd in de specifiekere functies en worden hier opnieuw geraised
+        # zodat app.py ze kan tonen aan de gebruiker.
+        # Voor CLI gebruik, kunnen we ze hier ook loggen als dat gewenst is, maar het zou dubbel zijn.
+        logger.error(f"Specifieke fout tijdens verwerking van {file_path}: {type(e).__name__} - {e}")
+        # Geen 'raise' hier, want process_tableau_file moet True/False retourneren voor de CLI main.
+        analysis_successful = False # Zorg ervoor dat het False is
+    except Exception as e:
+        # Vang alle andere onverwachte exceptions die mogelijk niet door de lagere functies zijn geraised/gelogd.
+        logger.exception(f"Onverwachte algemene fout tijdens verwerking van {file_path}: ")
+        analysis_successful = False
+    finally:
+        if temp_dir_for_twbx and os.path.exists(temp_dir_for_twbx):
+            try:
+                shutil.rmtree(temp_dir_for_twbx)
+                logger.info(f"Tijdelijke map {temp_dir_for_twbx} opgeruimd.")
+            except Exception as e:
+                logger.warning(f"Kon tijdelijke map {temp_dir_for_twbx} niet opruimen: {e}")
             
     return analysis_successful
 
 def main():
-    print("Tableau Analyzer - Vereenvoudigde versie gestart")
-    print(f"Python versie: {sys.version}")
-    print(f"Werkmap: {os.getcwd()}")
+    # Configureer logger voor CLI gebruik
+    # Als dit script als library wordt geïmporteerd, wil je dit misschien niet hier doen.
+    logging.basicConfig(level=logging.INFO, 
+                        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+                        handlers=[logging.StreamHandler(sys.stderr)])
+    
+    logger.info("Tableau Analyzer CLI gestart")
+    logger.info(f"Python versie: {sys.version}")
+    logger.info(f"Werkmap: {os.getcwd()}")
     
     if len(sys.argv) < 2:
-        print("\nFOUT: Geen bestand opgegeven.")
-        print("Gebruik: python3 tableau_analyzer.py <pad_naar_bestand.twb_of_twbx>")
+        logger.error("Geen bestand opgegeven.")
+        logger.info("Gebruik: python3 tableau_analyzer.py <pad_naar_bestand.twb_of_twbx>")
         return 1
         
     target_file = os.path.abspath(sys.argv[1].strip('"\' '))
-    print(f"Doelbestand: {target_file}")
+    logger.info(f"Doelbestand: {target_file}")
 
     if not os.path.exists(target_file):
-        print(f"FOUT: Bestand niet gevonden: {target_file}")
+        logger.error(f"Bestand niet gevonden: {target_file}")
         return 1
         
     if not (target_file.lower().endswith('.twb') or target_file.lower().endswith('.twbx')):
-        print("FOUT: Ongeldig bestandstype. Alleen .twb of .twbx bestanden worden ondersteund.")
+        logger.error("Ongeldig bestandstype. Alleen .twb of .twbx bestanden worden ondersteund.")
         return 1
 
-    print("\n" + "="*50)
+    logger.info("="*50)
     if process_tableau_file(target_file):
-        print("\n" + "="*50)
-        print("Verwerking succesvol afgerond.")
+        logger.info("="*50)
+        logger.info("Verwerking succesvol afgerond.")
         return 0
     else:
-        print("\n" + "="*50)
-        print("Verwerking mislukt.")
+        logger.info("="*50)
+        logger.error("Verwerking mislukt. Zie logs hierboven voor details.")
         return 1
 
 if __name__ == "__main__":
+    # Verplaats logger configuratie naar main om dubbele handlers te voorkomen als module wordt geladen
+    # De globale logger setup bovenaan het bestand zal gebruikt worden als dit als library wordt geïmporteerd.
+    # Voor CLI, kan main() de configuratie overschrijven of verfijnen.
+    # In dit geval, de basicConfig in main() zal de root logger configureren.
+    # De logger = logging.getLogger(__name__) zal deze configuratie erven.
     sys.exit(main())
