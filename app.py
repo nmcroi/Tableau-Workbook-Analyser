@@ -62,11 +62,23 @@ def display_field_info(field):
     
     # Toon aanvullende informatie
     if 'formule' in field and field['formule']:
-        with st.expander("Berekende formule"):
-            st.code(field['formule'], language='sql')
+        with st.expander("Details berekend veld"):
+            st.write("**Formule:**")
+            st.code(field['formule'], language='sql') # 'tableau' of 'markdown' indien beter
+            
+            if 'complexiteit' in field:
+                st.write(f"**Complexiteit:** {field['complexiteit']}")
+            
+            if 'afhankelijkheden' in field:
+                st.write("**Afhankelijkheden:**")
+                if field['afhankelijkheden']:
+                    for dep in field['afhankelijkheden']:
+                        st.write(f"- `{dep}`") # Gebruik code formatting voor veldnamen
+                else:
+                    st.write("Geen directe afhankelijkheden gevonden.")
 
     if 'alias' in field and field['alias']:
-        st.caption(f"Weergavenaam: {field['alias']}")
+        st.caption(f"Weergavenaam (Alias): {field['alias']}")
 
 def display_datasource(ds):
     """Toon informatie over een databron"""
@@ -208,26 +220,71 @@ def main():
             
             # Analyse uitvoeren
             with st.spinner("Bezig met analyseren... Dit kan even duren voor grote bestanden."):
+                analysis_path = temp_file
+                temp_dir_for_twbx_extraction = None # Voor opruimen
                 try:
-                    # Analyseer het bestand
-                    analyse_data = analyseer_tableau_bestand(temp_file)
+                    if uploaded_file.name.lower().endswith('.twbx'):
+                        st.info("Het is een .twbx bestand, bezig met uitpakken...")
+                        # Maak een unieke submap voor extractie binnen temp_dir
+                        # Dit voorkomt conflicten als bestandsnamen in zip hetzelfde zijn als de zip zelf.
+                        timestamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+                        temp_dir_for_twbx_extraction = os.path.join(temp_dir, f"extracted_{timestamp}")
+                        os.makedirs(temp_dir_for_twbx_extraction, exist_ok=True)
+                        
+                        # extraheer_twb_uit_twbx is nu onderdeel van tableau_analyzer en logt zelf
+                        # en raised exceptions bij fouten.
+                        analysis_path = extraheer_twb_uit_twbx(temp_file, temp_dir_for_twbx_extraction)
+                        if not analysis_path: 
+                            # Dit zou niet moeten gebeuren als extraheer_twb_uit_twbx een exception raised.
+                            # Maar als het None retourneert zonder exception:
+                            st.error("Kon het .twb-bestand niet uit het .twbx-archief extraheren. Het archief is mogelijk leeg of beschadigd.")
+                            # Clear session state to prevent showing old data
+                            if 'analyse_data' in st.session_state:
+                                del st.session_state['analyse_data']
+                            return # Stop verdere verwerking
+
+                    # Analyseer het .twb bestand (of het geëxtraheerde .twb bestand)
+                    analyse_data = analyseer_tableau_bestand(analysis_path) 
                     
-                    if analyse_data:
-                        # Bewaar de analysegegevens in de sessie
-                        st.session_state['analyse_data'] = analyse_data
-                        st.session_state['bestandsnaam'] = uploaded_file.name
-                        st.success("Analyse voltooid!")
-                    else:
-                        st.error("Er is een fout opgetreden tijdens het analyseren van het bestand.")
-                    
-                except Exception as e:
-                    st.error(f"Er is een fout opgetreden: {str(e)}")
+                    # analyseer_tableau_bestand raised exceptions bij fouten, dus als we hier komen is het succesvol
+                    st.session_state['analyse_data'] = analyse_data
+                    st.session_state['bestandsnaam'] = uploaded_file.name # Originele bestandsnaam
+                    st.success("Analyse voltooid!")
+
+                except FileNotFoundError:
+                    st.error(f"Bestand niet gevonden: {temp_file}. Dit zou niet moeten gebeuren na een succesvolle upload.")
+                except zipfile.BadZipFile:
+                    st.error("Fout bij het verwerken van het .twbx-bestand: Het bestand lijkt corrupt of is geen geldig zip-archief.")
+                except (KeyError, IndexError): # Gevangen als .twb niet in .twbx zit
+                    st.error("Kon geen geldig .twb-bestand vinden in het geüploade .twbx-archief. Controleer de inhoud van het bestand.")
+                except ET.ParseError: # Specifiek voor XML parse fouten
+                    st.error("Fout bij het parsen van het Tableau-bestand. Controleer of het een geldig .twb XML-bestand is (of correct is geëxtraheerd uit .twbx).")
+                except Exception as e: # Vang alle andere exceptions van de analyzer
+                    st.error(f"Er is een onverwachte technische fout opgetreden tijdens de analyse.")
+                    # Optioneel: toon meer details in een expander voor technische gebruikers
+                    with st.expander("Technische details van de fout (voor ontwikkelaars)"):
+                        st.text(f"Fouttype: {type(e).__name__}")
+                        st.text(f"Foutmelding: {str(e)}")
+                    # Clear session state om te voorkomen dat oude data wordt getoond bij een nieuwe fout
+                    if 'analyse_data' in st.session_state:
+                        del st.session_state['analyse_data']
                 finally:
-                    # Tijdelijk bestand verwijderen
-                    try:
-                        os.remove(temp_file)
-                    except:
-                        pass
+                    # Tijdelijk origineel geüpload bestand verwijderen
+                    if os.path.exists(temp_file):
+                        try:
+                            os.remove(temp_file)
+                        except Exception as e_rem_orig:
+                            # Loggen naar console/server log, niet per se naar UI
+                            print(f"Waarschuwing: kon tijdelijk geüpload bestand {temp_file} niet verwijderen: {e_rem_orig}")
+                    
+                    # Tijdelijke extractiemap verwijderen indien aangemaakt
+                    if temp_dir_for_twbx_extraction and os.path.exists(temp_dir_for_twbx_extraction):
+                        try:
+                            # shutil.rmtree is nodig voor mappen
+                            import shutil
+                            shutil.rmtree(temp_dir_for_twbx_extraction)
+                        except Exception as e_rem_extr:
+                            print(f"Waarschuwing: kon tijdelijke extractiemap {temp_dir_for_twbx_extraction} niet verwijderen: {e_rem_extr}")
         
         # Toon analyse-resultaten als die er zijn
         if 'analyse_data' in st.session_state and st.session_state['analyse_data']:
