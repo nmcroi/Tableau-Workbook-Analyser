@@ -1,0 +1,6 @@
+[theme]
+base = "dark"
+primaryColor = "#FF8C00" # DarkOrange
+# backgroundColor = "#1E1E1E" # Optionally uncomment and adjust if needed
+# secondaryBackgroundColor = "#2C2C2C" # Optionally uncomment and adjust if needed
+# textColor = "#FFFFFF" # Optionally uncomment and adjust if needed
