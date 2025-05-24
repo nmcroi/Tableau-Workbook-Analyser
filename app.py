@@ -147,6 +147,7 @@ def main():
 
     with col1:
         st.image("static/images/ghx_logo.png", width=200)
+        # The diagnostic HTML img tag has been removed from here.
 
     with col2:
         st.image("static/images/tableau_logo.png", width=60)
