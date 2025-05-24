@@ -50,6 +50,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Functie om aangepaste CSS te laden
+def load_custom_css():
+    """Laadt aangepaste CSS uit static/style.css en past deze toe."""
+    css_file_path = os.path.join("static", "style.css")
+    if os.path.exists(css_file_path):
+        with open(css_file_path, "r") as f:
+            css_content = f.read()
+        st.markdown(f'<style>{css_content}</style>', unsafe_allow_html=True)
+    else:
+        st.warning("Aangepast CSS-bestand (style.css) niet gevonden in de map 'static'.")
+
 def display_field_info(field):
     """Toon veldinformatie in een leesbaar formaat"""
     col1, col2, col3 = st.columns(3)
@@ -349,6 +360,10 @@ def main():
     st.markdown("---")
     st.caption("Tableau Analyzer - Gemaakt met Streamlit")
 
+# De display_datasource, display_worksheet, display_dashboard functies zijn hieronder
+# ongewijzigd gebleven, maar voor de duidelijkheid van de diff hier ingekort.
+# Zorg ervoor dat ze in de uiteindelijke code aanwezig zijn.
+
 def display_datasource(bron):
     """Toon details van een databron"""
     with st.expander(f"🔌 {bron.get('naam', 'Onbekende bron')}"):
@@ -428,4 +443,5 @@ def display_dashboard(db):
             st.dataframe(pd.DataFrame(objecten))
 
 if __name__ == "__main__":
+    load_custom_css() # Laad CSS voordat de rest van de app wordt getekend
     main()

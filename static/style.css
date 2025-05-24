@@ -1,0 +1,48 @@
+/* General body text if needed, though Streamlit's base dark theme should handle this */
+body {
+    color: #EAEAEA; /* Light gray for text on dark background */
+}
+
+/* Streamlit expander styling */
+.stApp [data-testid="stExpander"] > div:first-child { /* Expander header */
+    background-color: #2C2C2C; /* Darker gray for expander header */
+    border-radius: 0.5rem;
+}
+.stApp [data-testid="stExpander"] > div:first-child details summary:hover {
+     background-color: #3A3A3A; /* Slightly lighter gray on hover */
+}
+.stApp [data-testid="stExpander"] > div:first-child details summary p { /* Expander title text */
+    color: #FF8C00; /* Orange for expander titles */
+    font-weight: bold;
+}
+
+/* Styling for Pandas DataFrames (tables) */
+.stDataFrame table {
+    border: 1px solid #FF8C00; /* Orange border for table */
+}
+.stDataFrame th { /* Table headers */
+    background-color: #FF8C00; /* Orange background for headers */
+    color: #FFFFFF; /* White text on orange headers */
+}
+.stDataFrame td { /* Table cells */
+    border-color: #2C2C2C; /* Dark gray for cell borders */
+}
+
+/* Custom styling for Streamlit buttons if primaryColor isn't enough */
+/* This rule targets the default button. Be careful if you have different button types. */
+.stButton>button {
+    border: 1px solid #FF8C00;
+    /* The primaryColor from config.toml should handle background and text color for the main button.
+       This CSS adds an orange border. If more specific styling is needed (e.g., for secondary buttons
+       that don't pick up primaryColor), more specific selectors would be required. */
+}
+
+/* Styling for code blocks */
+/* Streamlit's dark theme usually handles code blocks well. These are overrides if needed. */
+.stCodeBlock > div { /* Target the container of the code */
+    background-color: #2C2C2C !important;
+}
+.stCodeBlock code, .stCodeBlock pre {
+    background-color: #2C2C2C !important; /* Ensure dark background for code */
+    color: #EAEAEA !important; /* Light text for code */
+}
