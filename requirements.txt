@@ -1,0 +1,5 @@
+streamlit>=1.24.0
+lxml>=4.9.0
+pandas>=1.4.0
+openpyxl>=3.0.0  # Voor Excel ondersteuning
+python-dotenv>=0.19.0  # Voor eventuele omgevingsvariabelen
