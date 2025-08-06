@@ -3,7 +3,9 @@ import os
 import json
 import pandas as pd
 import io
+import zipfile
 from datetime import datetime
+from lxml import etree as ET
 from tableau_analyzer import process_tableau_file, analyseer_tableau_bestand, extraheer_twb_uit_twbx, sla_op_als_json, NAMESPACES
 
 # Vertaaltabellen voor technische termen naar begrijpelijke taal
@@ -127,7 +129,7 @@ def display_worksheet(ws):
     if 'gebruikte_velden_direct' in ws and ws['gebruikte_velden_direct']:
         with st.expander(f"🔍 {len(ws['gebruikte_velden_direct'])} gebruikte velden"):
             for veld in ws['gebruikte_velden_direct']:
-                st.write(f"- {feld}")
+                st.write(f"- {veld}")
 
 def display_dashboard(db):
     """Toon informatie over een dashboard"""
@@ -445,4 +447,4 @@ def display_dashboard(db):
 
 if __name__ == "__main__":
     load_custom_css() # Laad CSS voordat de rest van de app wordt getekend
-    main()
+    main() 

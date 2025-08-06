@@ -1,0 +1,75 @@
+{
+    "bestandsnaam": "Book1.twb",
+    "extract_datum": "2025-08-04T21:02:56.323021",
+    "databronnen": [
+        {
+            "naam": "federated.064k5ly1fon8an16lxciv14tuw66",
+            "versie": "18.1",
+            "verbindingen": [
+                {
+                    "class": "federated",
+                    "dbname": null,
+                    "server": null,
+                    "username": null
+                },
+                {
+                    "class": "oracle",
+                    "dbname": null,
+                    "server": "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=10.1.45.100)(PORT=1521))(CONNECT_DATA=(SID=PM4C)))",
+                    "username": "M4C_READ"
+                },
+                {
+                    "class": "hyper",
+                    "dbname": "/Users/ghxnielscroiset/Library/CloudStorage/OneDrive-GlobalHealthcareExchange/Documenten/My Tableau Repository/Datasources/Extracts/Custom SQL Query (M4C).hyper",
+                    "server": null,
+                    "username": "tableau_internal_user"
+                }
+            ],
+            "kolommen": [
+                {
+                    "naam": "[JAAR]",
+                    "alias": null,
+                    "datatype": "string",
+                    "rol": "dimension",
+                    "type": "nominal",
+                    "caption": null,
+                    "is_berekend_veld": false
+                },
+                {
+                    "naam": "[__tableau_internal_object_id__].[_AF96638C918B41E28ED8CF91830C1A06]",
+                    "alias": null,
+                    "datatype": "table",
+                    "rol": "measure",
+                    "type": "quantitative",
+                    "caption": "Custom SQL Query",
+                    "is_berekend_veld": false
+                }
+            ]
+        },
+        {
+            "naam": "federated.064k5ly1fon8an16lxciv14tuw66",
+            "versie": "N/A",
+            "verbindingen": [],
+            "kolommen": []
+        }
+    ],
+    "werkbladen": [
+        {
+            "naam": "Sheet 1",
+            "gebruikte_databronnen": [
+                "federated.064k5ly1fon8an16lxciv14tuw66"
+            ],
+            "gebruikte_velden_direct": [
+                "[JAAR]",
+                "[TOTAAL_AANTAL_BESTELD]",
+                "[TOTALE_WAARDE_EURO]"
+            ],
+            "filters": []
+        }
+    ],
+    "dashboards": [],
+    "verhalen": [],
+    "berekende_velden": [],
+    "parameters": [],
+    "extensies": []
+}

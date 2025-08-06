@@ -412,4 +412,4 @@ if __name__ == "__main__":
     # Voor CLI, kan main() de configuratie overschrijven of verfijnen.
     # In dit geval, de basicConfig in main() zal de root logger configureren.
     # De logger = logging.getLogger(__name__) zal deze configuratie erven.
-    sys.exit(main())
+    sys.exit(main()) 
