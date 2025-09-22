@@ -44,6 +44,35 @@ def translate_role(role):
 def translate_type(t):
     return TYPE_TRANSLATION.get(t, t)
 
+# Helperfuncties voor veilige bestands- en afbeeldingsafhandeling
+def _base_dir():
+    try:
+        return os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        return os.getcwd()
+
+def static_path(*parts):
+    """Geef een absoluut pad terug binnen de static/ map."""
+    return os.path.join(_base_dir(), "static", *parts)
+
+def safe_st_image(rel_or_abs_path, **kwargs):
+    """Toon een afbeelding als het bestand bestaat; toon anders een vriendelijke melding."""
+    path = rel_or_abs_path
+    # Zet om naar absoluut pad indien nodig
+    if not os.path.isabs(path):
+        # Ondersteun paden die beginnen met 'static/'
+        if path.startswith("static/"):
+            # strip 'static/' en voeg aan static_path toe
+            parts = path.split("/", 1)[1] if "/" in path else ""
+            path = static_path(*([p for p in parts.split("/") if p]))
+        else:
+            path = os.path.join(_base_dir(), path)
+    if os.path.exists(path):
+        st.image(path, **kwargs)
+    else:
+        # Gebruik een compacte info-melding i.p.v. exception zodat de app niet crasht
+        st.info(f"Afbeelding niet gevonden: {rel_or_abs_path}")
+
 # Pagina configuratie
 st.set_page_config(
     page_title="Tableau Analyzer",
@@ -55,7 +84,7 @@ st.set_page_config(
 # Functie om aangepaste CSS te laden
 def load_custom_css():
     """Laadt aangepaste CSS uit static/style.css en past deze toe."""
-    css_file_path = os.path.join("static", "style.css")
+    css_file_path = static_path("style.css")
     if os.path.exists(css_file_path):
         with open(css_file_path, "r") as f:
             css_content = f.read()
@@ -148,11 +177,11 @@ def main():
     col1, col2, col3 = st.columns([1.5, 0.5, 3], gap="small")
 
     with col1:
-        st.image("static/images/ghx_logo.png", width=200)
+        safe_st_image("static/images/ghx_logo.png", width=200)
         # The diagnostic HTML img tag has been removed from here.
 
     with col2:
-        st.image("static/images/tableau_logo.png", width=60)
+        safe_st_image("static/images/tableau_logo.png", width=60)
 
     with col3:
         st.title("Tableau Workbook Analyzer")
