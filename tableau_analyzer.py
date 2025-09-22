@@ -381,9 +381,20 @@ def main():
     logger.info(f"Werkmap: {os.getcwd()}")
     
     if len(sys.argv) < 2:
-        logger.error("Geen bestand opgegeven.")
-        logger.info("Gebruik: python3 tableau_analyzer.py <pad_naar_bestand.twb_of_twbx>")
-        return 1
+        # Fallback: als dit script per abuis als Streamlit main file wordt gestart (zoals op Streamlit Cloud),
+        # start dan de echte Streamlit UI uit app.py in plaats van te stoppen met een foutmelding.
+        try:
+            import streamlit as st  # type: ignore
+            logger.info("Geen CLI-bestand opgegeven; start Streamlit UI vanuit app.py als fallback.")
+            from app import load_custom_css as _load_css, main as _app_main  # lazy import om import-cycli te vermijden
+            _load_css()
+            _app_main()
+            return 0
+        except Exception:
+            # Als we de Streamlit UI niet kunnen starten, val terug op de originele CLI melding
+            logger.error("Geen bestand opgegeven.")
+            logger.info("Gebruik: python3 tableau_analyzer.py <pad_naar_bestand.twb_of_twbx>")
+            return 1
         
     target_file = os.path.abspath(sys.argv[1].strip('"\' '))
     logger.info(f"Doelbestand: {target_file}")
